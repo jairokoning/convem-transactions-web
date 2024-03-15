@@ -1,9 +1,129 @@
+"use client"
+import Button from "@/components/Button";
+import Table from "@/components/Table";
+import axios from "axios";
 import Image from "next/image";
+import { useEffect, useState } from "react";
+
+export type Transaction = {
+  idempotencyId: { S: string },
+  amount: { N: number },
+  type: { S: 'credit' | 'debit' },
+}
 
 export default function Home() {
+  const [formatedTransactions, setFormatedTransactions] = useState([]);
+  const [totalRows, setTotalRows] = useState(0);
+  const [lastEvaluatedKey, setLastEvaluatedKey] = useState<{} | undefined>(undefined)
+  const [scriptIsExec, setScriptIsExec] = useState(false)
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        const response = await axios.get(process.env.SERVERLESS_API_URL as string);
+        
+        const transactions = response.data.Items
+        setTotalRows(response.data.Count)
+        
+        if (transactions.length > 0) {
+          setFormatedTransactions(() => {
+            return transactions.map((transaction: Transaction) => {
+              return {
+                idempotencyId: transaction.idempotencyId.S,
+                amount: formatter.format(transaction.amount.N / 100),
+                type: transaction.type.S
+              }
+            })
+          });
+          if (response.data.LastEvaluatedKey?.idempotencyId?.S) {
+            setLastEvaluatedKey(response.data.LastEvaluatedKey.idempotencyId.S)
+          } else {
+            setLastEvaluatedKey(undefined)  
+          }
+        } else {
+          setFormatedTransactions([])
+          setLastEvaluatedKey(undefined)
+        }
+        
+      } catch (err) {
+        console.error('Error fetching transactions:', err);
+      }
+    };
+
+    fetchTransactions();
+  }, []);  
+
+  const formatter = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  });
+
+  const handleGetTransactions = async() => {
+    let url = process.env.SERVERLESS_API_URL as string
+    if (lastEvaluatedKey) {
+      url = `${process.env.SERVERLESS_API_URL}?lastEvaluatedKey=${lastEvaluatedKey}`
+    }
+
+    const response = await axios.get(url);
+    const transactions = response?.data?.Items || []
+    setTotalRows(response.data.Count)
+
+    if (transactions.length > 0) {
+      setFormatedTransactions(() => {
+        return transactions.map((transaction: Transaction) => {
+          return {
+            idempotencyId: transaction.idempotencyId.S,
+            amount: formatter.format(transaction.amount.N / 100),
+            type: transaction.type.S
+          }
+        })
+      });
+      if (response.data.LastEvaluatedKey?.idempotencyId?.S) {
+        setLastEvaluatedKey(response.data.LastEvaluatedKey.idempotencyId.S)
+      } else {
+        setLastEvaluatedKey(undefined)  
+      }
+    } else {
+      setFormatedTransactions([])
+      setLastEvaluatedKey(undefined)
+    }
+  }
+
+  const handleGenerateTransactiosScript = async() => {
+    setScriptIsExec(true)
+    const quantity = 100;
+    try {
+      for (let count = 0; count < quantity; count++) {
+        
+        const newTransaction = {
+          amount: Math.floor(Math.random() * 10000),
+          type: Math.random() < 0.5 ? 'credit' : 'debit',
+        }
+        await axios.post(process.env.BACKEND_API_URL as string, newTransaction);        
+      }
+      handleGetTransactions()
+      setScriptIsExec(false)
+    } catch (error) {
+      setScriptIsExec(false)
+      console.log(error)  
+    }    
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
+    <main className="flex min-h-screen flex-col items-center px-24">
+      <div className="container mx-auto py-6">
+      <div className="flex items-center justify-between container mx-0">
+      <h1 className="text-2xl font-bold mb-6">Transactions List (Total: {totalRows})</h1>        
+        <Button 
+          onClick={handleGenerateTransactiosScript} 
+          children={scriptIsExec ? "Please wait: Script running" : "Script: Add 100 Transactions"}
+          disabled={scriptIsExec}
+        />
+      </div>
+      <Table transactions={formatedTransactions} />
+      </div>
+      {/* <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
+       
         <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
           Get started by editing&nbsp;
           <code className="font-mono font-bold">src/app/page.tsx</code>
@@ -26,9 +146,9 @@ export default function Home() {
             />
           </a>
         </div>
-      </div>
+      </div> */}
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-full sm:before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full sm:after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
+      {/* <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-full sm:before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full sm:after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
         <Image
           className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
           src="/next.svg"
@@ -107,7 +227,13 @@ export default function Home() {
             Instantly deploy your Next.js site to a shareable URL with Vercel.
           </p>
         </a>
-      </div>
+      </div> */}
+
+      
+        <div className="flex items-center justify-center space-x-4 container mb-4">
+          <Button onClick={handleGetTransactions} children={lastEvaluatedKey ? "Next Page" : "First Page"} />
+          {/* {lastEvaluatedKey ? <Button onClick={handleGetTransactions} children="Next Page" />: null} */}
+        </div>        
     </main>
   );
 }
